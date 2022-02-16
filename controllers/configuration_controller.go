@@ -89,6 +89,8 @@ const (
 	ClusterRoleName = "tf-executor-clusterrole"
 	// ServiceAccountName is the name of the ServiceAccount for Terraform Job
 	ServiceAccountName = "tf-executor-service-account"
+	// VariableSecretHashKey is the name of the annotation for Terraform Job variable secret to find out changes in values
+	VariableSecretHashAnnotationKey = "last-applied-variables-hash"
 )
 
 // ConfigurationReconciler reconciles a Configuration object.
@@ -111,6 +113,10 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	if configuration.Spec.ProviderReference != nil && configuration.Spec.ProviderReference.Namespace == provider.DefaultNamespace {
+		configuration.Spec.ProviderReference.Namespace = configuration.Namespace
+	}
+
 	meta := initTFConfigurationMeta(req, configuration)
 
 	// add finalizer
@@ -118,6 +124,10 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if !isDeleting {
 		if !controllerutil.ContainsFinalizer(&configuration, configurationFinalizer) {
 			controllerutil.AddFinalizer(&configuration, configurationFinalizer)
+			if configuration.Spec.ProviderReference != nil && configuration.Spec.ProviderReference.Namespace == provider.DefaultNamespace {
+				configuration.Spec.ProviderReference.Namespace = configuration.Namespace
+			}
+
 			if err := r.Update(ctx, &configuration); err != nil {
 				return ctrl.Result{RequeueAfter: 3 * time.Second}, errors.Wrap(err, "failed to add finalizer")
 			}
@@ -134,6 +144,15 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if tfExecutionJob.Status.Succeeded == int32(1) {
 			if err := meta.updateApplyStatus(ctx, r.Client, types.Available, types.MessageCloudResourceDeployed); err != nil {
 				return ctrl.Result{}, err
+			}
+
+			//if job is 2 minutes older than delete it..
+			compTime := tfExecutionJob.Status.CompletionTime
+			if compTime != nil && compTime.Add(2*time.Minute).Before(time.Now()) {
+				klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
+				if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 		}
 	}
@@ -156,13 +175,30 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			}
 			return ctrl.Result{RequeueAfter: 3 * time.Second}, errors.Wrap(err, "continue reconciling to destroy cloud resource")
 		}
-		if controllerutil.ContainsFinalizer(&configuration, configurationFinalizer) {
-			controllerutil.RemoveFinalizer(&configuration, configurationFinalizer)
-			if err := r.Update(ctx, &configuration); err != nil {
-				return ctrl.Result{RequeueAfter: 3 * time.Second}, errors.Wrap(err, "failed to remove finalizer")
+
+		removeFinalizerFunc := func() error {
+			if confi, err := tfcfg.Get(ctx, r.Client, req.NamespacedName); err != nil {
+				return client.IgnoreNotFound(err)
+			} else {
+				if controllerutil.ContainsFinalizer(&confi, configurationFinalizer) {
+					controllerutil.RemoveFinalizer(&confi, configurationFinalizer)
+					if configuration.Spec.ProviderReference != nil && configuration.Spec.ProviderReference.Namespace == provider.DefaultNamespace {
+						configuration.Spec.ProviderReference.Namespace = configuration.Namespace
+					}
+					if err := r.Update(ctx, &confi); err != nil {
+						return errors.Wrap(err, "failed to remove finalizer")
+					}
+				}
 			}
+			klog.Info("Removed finalizer")
+			return nil
 		}
-		return ctrl.Result{}, nil
+
+		if err := util.Retry(removeFinalizerFunc, 3*time.Second, 50); err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to remove finalizer")
+		} else {
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// Terraform apply (create or update)
@@ -209,16 +245,18 @@ type TFConfigurationMeta struct {
 	TerraformBackendNamespace string
 	BusyboxImage              string
 	GitImage                  string
+	DeleteSecretOnJobUpdate   bool
 }
 
 func initTFConfigurationMeta(req ctrl.Request, configuration v1beta1.Configuration) *TFConfigurationMeta {
 	var meta = &TFConfigurationMeta{
-		Namespace:           req.Namespace,
-		Name:                req.Name,
-		ConfigurationCMName: fmt.Sprintf(TFInputConfigMapName, req.Name),
-		VariableSecretName:  fmt.Sprintf(TFVariableSecret, req.Name),
-		ApplyJobName:        req.Name + "-" + string(TerraformApply),
-		DestroyJobName:      req.Name + "-" + string(TerraformDestroy),
+		Namespace:               req.Namespace,
+		Name:                    req.Name,
+		ConfigurationCMName:     fmt.Sprintf(TFInputConfigMapName, req.Name),
+		VariableSecretName:      fmt.Sprintf(TFVariableSecret, req.Name),
+		ApplyJobName:            req.Name + "-" + string(TerraformApply),
+		DestroyJobName:          req.Name + "-" + string(TerraformDestroy),
+		DeleteSecretOnJobUpdate: true,
 	}
 
 	// githubBlocked mark whether GitHub is blocked in the cluster
@@ -332,6 +370,9 @@ func (r *ConfigurationReconciler) terraformDestroy(ctx context.Context, namespac
 		if configuration.Spec.WriteConnectionSecretToReference != nil {
 			secretName := configuration.Spec.WriteConnectionSecretToReference.Name
 			secretNameSpace := configuration.Spec.WriteConnectionSecretToReference.Namespace
+			if len(secretNameSpace) == 0 {
+				secretNameSpace = configuration.Namespace
+			}
 			if err := deleteConnectionSecret(ctx, k8sClient, secretName, secretNameSpace); err != nil {
 				return err
 			}
@@ -435,6 +476,9 @@ func (r *ConfigurationReconciler) preCheck(ctx context.Context, configuration *v
 	}
 
 	// Check provider
+	if len(meta.ProviderReference.Namespace) == 0 {
+		meta.ProviderReference.Namespace = configuration.Namespace
+	}
 	provider, err := provider.GetProviderFromConfiguration(ctx, k8sClient, meta.ProviderReference.Namespace, meta.ProviderReference.Name)
 	if provider == nil {
 		msg := types.ErrProviderNotFound
@@ -447,6 +491,7 @@ func (r *ConfigurationReconciler) preCheck(ctx context.Context, configuration *v
 		return errors.New(msg)
 	}
 
+	//TODO check here
 	if err := meta.getCredentials(ctx, k8sClient, provider); err != nil {
 		return err
 	}
@@ -502,36 +547,54 @@ func (meta *TFConfigurationMeta) assembleAndTriggerJob(ctx context.Context, k8sC
 		return err
 	}
 
-	if err := meta.prepareTFVariables(configuration); err != nil {
+	if err := meta.prepareTFVariables(configuration, k8sClient); err != nil {
 		return err
 	}
 
-	if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.VariableSecretName, Namespace: meta.Namespace}, &v1.Secret{}); err != nil {
+	if err := meta.updateTerraformJobSecretIfNeeded(ctx, k8sClient); err != nil {
+		return err
+	}
+
+	job := meta.assembleTerraformJob(executionType, configuration)
+	return k8sClient.Create(ctx, job)
+}
+
+func (meta *TFConfigurationMeta) updateTerraformJobSecretIfNeeded(ctx context.Context, k8sClient client.Client) error {
+	sec := v1.Secret{}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.VariableSecretName, Namespace: meta.Namespace}, &sec); err != nil {
 		if kerrors.IsNotFound(err) {
 			var secret = v1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      meta.VariableSecretName,
 					Namespace: meta.Namespace,
+					Annotations: map[string]string{
+						VariableSecretHashAnnotationKey: util.GenerateHash(meta.VariableSecretData),
+					},
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret"},
 				Data:     meta.VariableSecretData,
 			}
-
 			if err := k8sClient.Create(ctx, &secret); err != nil {
 				return err
 			}
 		}
+	} else {
+		for k, v := range meta.VariableSecretData {
+			sec.Data[k] = v
+		}
+		sec.Annotations[VariableSecretHashAnnotationKey] = util.GenerateHash(sec.Data)
+		if err := k8sClient.Update(ctx, &sec); err != nil {
+			return err
+		}
 	}
-
-	job := meta.assembleTerraformJob(executionType)
-	return k8sClient.Create(ctx, job)
+	return nil
 }
 
 // updateTerraformJob will set deletion finalizer to the Terraform job if its envs are changed, which will result in
 // deleting the job. Finally, a new Terraform job will be generated
 func (meta *TFConfigurationMeta) updateTerraformJobIfNeeded(ctx context.Context, k8sClient client.Client, configuration v1beta1.Configuration,
 	job batchv1.Job) error {
-	if err := meta.prepareTFVariables(&configuration); err != nil {
+	if err := meta.prepareTFVariables(&configuration, k8sClient); err != nil {
 		return err
 	}
 
@@ -543,11 +606,14 @@ func (meta *TFConfigurationMeta) updateTerraformJobIfNeeded(ctx context.Context,
 
 	var envChanged bool
 	for k, v := range variableInSecret.Data {
-		if val, ok := meta.VariableSecretData[k]; !ok || !bytes.Equal(v, val) {
-			envChanged = true
-			klog.Info("Job's env changed")
-			if err := meta.updateApplyStatus(ctx, k8sClient, types.ConfigurationReloading, types.ConfigurationReloadingAsVariableChanged); err != nil {
-				return err
+		if val, ok := meta.VariableSecretData[k]; !ok {
+			if (string(val) != "FROM_SECRET_REF" && !bytes.Equal(v, val)) ||
+				(variableInSecret.Annotations[VariableSecretHashAnnotationKey] != util.GenerateHash(meta.VariableSecretData)) {
+				envChanged = true
+				klog.Info("Job's env changed")
+				if err := meta.updateApplyStatus(ctx, k8sClient, types.ConfigurationReloading, types.ConfigurationReloadingAsVariableChanged); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -561,17 +627,24 @@ func (meta *TFConfigurationMeta) updateTerraformJobIfNeeded(ctx context.Context,
 				return deleteErr
 			}
 		}
-		var s v1.Secret
-		if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.VariableSecretName, Namespace: meta.Namespace}, &s); err == nil {
-			if deleteErr := k8sClient.Delete(ctx, &s); deleteErr != nil {
-				return deleteErr
+		if meta.DeleteSecretOnJobUpdate {
+			var s v1.Secret
+			if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.VariableSecretName, Namespace: meta.Namespace}, &s); err == nil {
+				if deleteErr := k8sClient.Delete(ctx, &s); deleteErr != nil {
+					return deleteErr
+				}
+			}
+		} else {
+			if err := meta.updateTerraformJobSecretIfNeeded(ctx, k8sClient); err != nil {
+				klog.ErrorS(err, types.ErrUpdateTerraformApplyJob, "Name", meta.ApplyJobName)
+				return errors.Wrap(err, types.ErrUpdateTerraformApplyJob)
 			}
 		}
 	}
 	return nil
 }
 
-func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExecutionType) *batchv1.Job {
+func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExecutionType, configuration *v1beta1.Configuration) *batchv1.Job {
 	var (
 		initContainer  v1.Container
 		initContainers []v1.Container
@@ -580,8 +653,8 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 		backoffLimit   int32 = math.MaxInt32
 	)
 
-	executorVolumes := meta.assembleExecutorVolumes()
-	initContainerVolumeMounts := []v1.VolumeMount{
+	executorVolumes := meta.assembleExecutorVolumes(configuration)
+	initContainerVolumeMounts := append([]v1.VolumeMount{
 		{
 			Name:      meta.Name,
 			MountPath: WorkingVolumeMountPath,
@@ -594,7 +667,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 			Name:      BackendVolumeName,
 			MountPath: BackendVolumeMountPath,
 		},
-	}
+	}, configuration.Spec.VolumeSpec.VolumeMounts...)
 
 	initContainer = v1.Container{
 		Name:            "prepare-input-terraform-configurations",
@@ -627,6 +700,13 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 			})
 	}
 
+	//- name: spectro-common-dev-image-pull-secret
+	//- name: spectro-image-pull-secret
+
+	pullSecrets := make([]v1.LocalObjectReference, 0, 1)
+	pullSecrets = append(pullSecrets, v1.LocalObjectReference{Name: "spectro-common-dev-image-pull-secret"})
+	pullSecrets = append(pullSecrets, v1.LocalObjectReference{Name: "spectro-image-pull-secret"})
+
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Job",
@@ -641,7 +721,13 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 			Completions:  &completions,
 			BackoffLimit: &backoffLimit,
 			Template: v1.PodTemplateSpec{
+				//ObjectMeta: metav1.ObjectMeta{
+				//	Labels: map[string]string{
+				//		"spectrocloud.com/connection": "proxy",
+				//	},
+				//},
 				Spec: v1.PodSpec{
+					ImagePullSecrets: pullSecrets,
 					// InitContainer will copy Terraform configuration files to working directory and create Terraform
 					// state file directory in advance
 					InitContainers: initContainers,
@@ -650,13 +736,14 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 					Containers: []v1.Container{{
 						Name:            "terraform-executor",
 						Image:           meta.TerraformImage,
-						ImagePullPolicy: v1.PullIfNotPresent,
+						ImagePullPolicy: v1.PullAlways,
 						Command: []string{
 							"bash",
 							"-c",
-							fmt.Sprintf("terraform init && terraform %s -lock=false -auto-approve", executionType),
+							fmt.Sprintf("terraform init --plugin-dir /providers/plugins && terraform %s -lock=false -auto-approve", executionType),
 						},
-						VolumeMounts: []v1.VolumeMount{
+
+						VolumeMounts: append([]v1.VolumeMount{
 							{
 								Name:      meta.Name,
 								MountPath: WorkingVolumeMountPath,
@@ -665,7 +752,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 								Name:      InputTFConfigurationVolumeName,
 								MountPath: InputTFConfigurationVolumeMountPath,
 							},
-						},
+						}, configuration.Spec.VolumeSpec.VolumeMounts...),
 						Env: meta.Envs,
 					},
 					},
@@ -678,12 +765,12 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 	}
 }
 
-func (meta *TFConfigurationMeta) assembleExecutorVolumes() []v1.Volume {
+func (meta *TFConfigurationMeta) assembleExecutorVolumes(configuration *v1beta1.Configuration) []v1.Volume {
 	workingVolume := v1.Volume{Name: meta.Name}
 	workingVolume.EmptyDir = &v1.EmptyDirVolumeSource{}
 	inputTFConfigurationVolume := meta.createConfigurationVolume()
 	tfBackendVolume := meta.createTFBackendVolume()
-	return []v1.Volume{workingVolume, inputTFConfigurationVolume, tfBackendVolume}
+	return append([]v1.Volume{workingVolume, inputTFConfigurationVolume, tfBackendVolume}, configuration.Spec.VolumeSpec.Volumes...)
 }
 
 func (meta *TFConfigurationMeta) createConfigurationVolume() v1.Volume {
@@ -736,7 +823,7 @@ func (meta *TFConfigurationMeta) getTFOutputs(ctx context.Context, k8sClient cli
 	name := writeConnectionSecretToReference.Name
 	ns := writeConnectionSecretToReference.Namespace
 	if ns == "" {
-		ns = "default"
+		ns = configuration.Namespace
 	}
 	data := make(map[string][]byte)
 	for k, v := range outputs {
@@ -769,7 +856,7 @@ func (meta *TFConfigurationMeta) getTFOutputs(ctx context.Context, k8sClient cli
 	return outputs, nil
 }
 
-func (meta *TFConfigurationMeta) prepareTFVariables(configuration *v1beta1.Configuration) error {
+func (meta *TFConfigurationMeta) prepareTFVariables(configuration *v1beta1.Configuration, k8sClient client.Client) error {
 	var (
 		envs []v1.EnvVar
 		data = map[string][]byte{}
@@ -786,12 +873,43 @@ func (meta *TFConfigurationMeta) prepareTFVariables(configuration *v1beta1.Confi
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to get Terraform JSON variables from Configuration Variables %v", configuration.Spec.Variable))
 	}
+
+	skipNotFoundErr := true
+	for _, v := range tfVariable {
+		envValue, err := tfcfg.Interface2String(v)
+		if err != nil {
+			return err
+		}
+		if envValue == "FROM_SECRET_REF" {
+			skipNotFoundErr = false
+		}
+	}
+
+	secretData := make(map[string][]byte)
+	var variableInSecret v1.Secret
+	if err := k8sClient.Get(context.TODO(), client.ObjectKey{Name: meta.VariableSecretName, Namespace: meta.Namespace}, &variableInSecret); err != nil {
+		if !skipNotFoundErr && kerrors.IsNotFound(err) {
+			return err
+		}
+	} else {
+		if len(variableInSecret.Data) > 0 {
+			secretData = variableInSecret.Data
+		}
+	}
+
+	//get secret if it exists and add it in env var
 	for k, v := range tfVariable {
 		envValue, err := tfcfg.Interface2String(v)
 		if err != nil {
 			return err
 		}
-		data[k] = []byte(envValue)
+		if envValue != "FROM_SECRET_REF" {
+			data[k] = []byte(envValue)
+		} else {
+			meta.DeleteSecretOnJobUpdate = false
+			data[k] = secretData[k]
+		}
+
 		valueFrom := &v1.EnvVarSource{SecretKeyRef: &v1.SecretKeySelector{Key: k}}
 		valueFrom.SecretKeyRef.Name = meta.VariableSecretName
 		envs = append(envs, v1.EnvVar{Name: k, ValueFrom: valueFrom})
@@ -845,9 +963,6 @@ func deleteConnectionSecret(ctx context.Context, k8sClient client.Client, name, 
 	}
 
 	var connectionSecret v1.Secret
-	if len(ns) == 0 {
-		ns = "default"
-	}
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: name, Namespace: ns}, &connectionSecret); err == nil {
 		return k8sClient.Delete(ctx, &connectionSecret)
 	}
@@ -928,11 +1043,13 @@ func (meta *TFConfigurationMeta) CheckWhetherConfigurationChanges(ctx context.Co
 }
 
 // getCredentials will get credentials from secret of the Provider
-func (meta *TFConfigurationMeta) getCredentials(ctx context.Context, k8sClient client.Client, providerObj *v1beta1.Provider) error {
+func (meta *TFConfigurationMeta) getCredentials(ctx context.Context, k8sClient client.Client,
+	providerObj *v1beta1.Provider) error {
 	region, err := tfcfg.SetRegion(ctx, k8sClient, meta.Namespace, meta.Name, providerObj)
 	if err != nil {
 		return err
 	}
+
 	credentials, err := provider.GetProviderCredentials(ctx, k8sClient, providerObj, region)
 	if err != nil {
 		return err
@@ -940,3 +1057,23 @@ func (meta *TFConfigurationMeta) getCredentials(ctx context.Context, k8sClient c
 	meta.Credentials = credentials
 	return nil
 }
+
+//apiVersion: v1
+//data:
+//TF_VAR_NETWORK_WAN: dnRuZXQw
+//TF_VAR_NETWORK_LAN: dnRuZXQx
+//TF_VAR_IP_ADDR_WAN: ZGhjcA==
+//TF_VAR_IP_ADDR_LAN: MTkyLjE2OC4xMDAuMg==
+//TF_VAR_SUBNET_WAN: ""
+//TF_VAR_SUBNET_LAN: MjQ=
+//TF_VAR_DHCP_RANGE_START: MTkyLjE2OC4xMDAuNTA=
+//TF_VAR_DHCP_RANGE_END: MTkyLjE2OC4xMDAuMjAw
+//TF_VAR_VM_NAME: cGZzZW5zZS12bS1vcGVyYXRvcg==
+//TF_VAR_HOST_IP: My43MC4yMTAuNA==
+//TF_VAR_SSH_USER: cm9vdA==
+//TF_VAR_SSH_KEY: L3Zhci9rZXlzL3NzaC1rZXk=
+//kind: Secret
+//metadata:
+//name: variable-custom-example
+//namespace: default
+//type: Opaque

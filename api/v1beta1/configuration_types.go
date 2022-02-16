@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -38,6 +39,10 @@ type ConfigurationSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Variable *runtime.RawExtension `json:"variable,omitempty"`
 
+	VariableRef []corev1.EnvVar `json:"variableRef,omitempty"`
+
+	VolumeSpec VolumeSpec `json:"volumeSpec,omitempty"`
+
 	// Backend stores the state in a Kubernetes secret with locking done using a Lease resource.
 	// TODO(zzxwill) If a backend exists in HCL/JSON, this can be optional. Currently, if Backend is not set by users, it
 	// still will set by the controller, ignoring the settings in HCL/JSON backend
@@ -47,6 +52,12 @@ type ConfigurationSpec struct {
 	Path string `json:"path,omitempty"`
 
 	BaseConfigurationSpec `json:",inline"`
+}
+
+type VolumeSpec struct {
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
 }
 
 // BaseConfigurationSpec defines the common fields of a ConfigurationSpec

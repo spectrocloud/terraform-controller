@@ -75,6 +75,15 @@ spec:
                 required:
                 - source
                 type: object
+              files:
+                items:
+                  properties:
+                    content:
+                      type: string
+                    path:
+                      type: string
+                  type: object
+                type: array
               provider:
                 description: Provider is the cloud service provider, like `alibaba`
                 type: string
@@ -83,6 +92,7 @@ spec:
                 type: string
             required:
             - credentials
+            - files
             - provider
             type: object
           status:

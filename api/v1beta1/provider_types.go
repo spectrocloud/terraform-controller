@@ -33,6 +33,8 @@ type ProviderSpec struct {
 
 	// Credentials required to authenticate to this provider.
 	Credentials ProviderCredentials `json:"credentials"`
+
+	Files []File `json:"files"`
 }
 
 // ProviderCredentials required to authenticate.
@@ -45,6 +47,11 @@ type ProviderCredentials struct {
 	// that must be used to connect to the provider.
 	// +optional
 	SecretRef *crossplanetypes.SecretKeySelector `json:"secretRef,omitempty"`
+}
+
+type File struct {
+	Path    string `json:"path,omitempty"`
+	Content string `json:"content,omitempty"`
 }
 
 // ProviderStatus defines the observed state of Provider.

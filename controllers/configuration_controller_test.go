@@ -474,7 +474,7 @@ func TestAssembleTerraformJob(t *testing.T) {
 		TerraformImage:      "f",
 		RemoteGit:           "g",
 	}
-	job := meta.assembleTerraformJob(TerraformApply)
+	job := meta.assembleTerraformJob(TerraformApply, &v1beta1.Configuration{})
 	containers := job.Spec.Template.Spec.InitContainers
 	assert.Equal(t, containers[0].Image, "c")
 	assert.Equal(t, containers[1].Image, "d")
