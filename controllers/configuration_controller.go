@@ -721,11 +721,11 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 			Completions:  &completions,
 			BackoffLimit: &backoffLimit,
 			Template: v1.PodTemplateSpec{
-				//ObjectMeta: metav1.ObjectMeta{
-				//	Labels: map[string]string{
-				//		"spectrocloud.com/connection": "proxy",
-				//	},
-				//},
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"spectrocloud.com/connection": "proxy",
+					},
+				},
 				Spec: v1.PodSpec{
 					ImagePullSecrets: pullSecrets,
 					// InitContainer will copy Terraform configuration files to working directory and create Terraform
@@ -740,7 +740,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 						Command: []string{
 							"bash",
 							"-c",
-							fmt.Sprintf("terraform init --plugin-dir /providers/plugins && terraform %s -lock=false -auto-approve", executionType),
+							fmt.Sprintf("terraform init --plugin-dir /providers/plugins && /providers/exec.sh %s -lock=false -auto-approve", executionType),
 						},
 
 						VolumeMounts: append([]v1.VolumeMount{
