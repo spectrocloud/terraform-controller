@@ -736,7 +736,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 					Containers: []v1.Container{{
 						Name:            "terraform-executor",
 						Image:           meta.TerraformImage,
-						ImagePullPolicy: v1.PullAlways,
+						ImagePullPolicy: v1.PullIfNotPresent,
 						Command: []string{
 							"bash",
 							"-c",
