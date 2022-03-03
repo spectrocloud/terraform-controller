@@ -213,7 +213,8 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err != nil {
 		klog.ErrorS(err, "Terraform apply failed")
 		if updateErr := meta.updateApplyStatus(ctx, r.Client, state, err.Error()); updateErr != nil {
-			return ctrl.Result{}, updateErr
+			// fmt.Println("RequeueAfter: 3 * time.Minute")
+			return ctrl.Result{RequeueAfter: 3 * time.Minute}, updateErr
 		}
 	}
 
@@ -740,7 +741,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 						Command: []string{
 							"bash",
 							"-c",
-							fmt.Sprintf("terraform init --plugin-dir /providers/plugins && /providers/exec.sh %s -lock=false -auto-approve", executionType),
+							fmt.Sprintf("terraform init --plugin-dir /providers/plugins && /providers/exec.sh %s", executionType),
 						},
 
 						VolumeMounts: append([]v1.VolumeMount{
