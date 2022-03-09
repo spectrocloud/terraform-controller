@@ -869,6 +869,10 @@ func (meta *TFConfigurationMeta) prepareTFVariables(configuration *v1beta1.Confi
 		return errors.New("The referenced provider could not be retrieved")
 	}
 
+	if configuration.Spec.VariableRef != nil {
+		envs = configuration.Spec.VariableRef
+	}
+
 	tfVariable, err := getTerraformJSONVariable(configuration.Spec.Variable)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to get Terraform JSON variables from Configuration Variables %v", configuration.Spec.Variable))
