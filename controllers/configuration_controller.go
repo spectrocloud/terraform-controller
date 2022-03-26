@@ -644,6 +644,23 @@ func (meta *TFConfigurationMeta) updateTerraformJobIfNeeded(ctx context.Context,
 	return nil
 }
 
+// Adding support for sleep so that issues can be debugged easily by logging in
+func (meta *TFConfigurationMeta) getExecutableContainerCommand(executionType TerraformExecutionType) []string {
+	if len(os.Getenv("SLEEP")) > 0 {
+		return []string{
+			"bash",
+			"-c",
+			fmt.Sprintf("sleep %s; /providers/exec.sh %s", os.Getenv("SLEEP"), executionType),
+		}
+	} else {
+		return []string{
+			"bash",
+			"-c",
+			fmt.Sprintf("/providers/exec.sh %s", executionType),
+		}
+	}
+}
+
 func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExecutionType, configuration *v1beta1.Configuration) *batchv1.Job {
 	var (
 		initContainer  v1.Container
@@ -737,11 +754,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 						Name:            "terraform-executor",
 						Image:           meta.TerraformImage,
 						ImagePullPolicy: v1.PullIfNotPresent,
-						Command: []string{
-							"bash",
-							"-c",
-							fmt.Sprintf("terraform init --plugin-dir /providers/plugins && /providers/exec.sh %s", executionType),
-						},
+						Command:         meta.getExecutableContainerCommand(executionType),
 
 						VolumeMounts: append([]v1.VolumeMount{
 							{
