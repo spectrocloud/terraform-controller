@@ -33,8 +33,6 @@ type ProviderSpec struct {
 
 	// Credentials required to authenticate to this provider.
 	Credentials ProviderCredentials `json:"credentials"`
-
-	Files []File `json:"files"`
 }
 
 // ProviderCredentials required to authenticate.
