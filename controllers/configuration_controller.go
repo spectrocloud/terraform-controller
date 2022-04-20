@@ -113,6 +113,12 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	annotations := configuration.GetAnnotations()
+	if val, ok := annotations["vmoperator.cluster.spectrocloud.com/paused"]; ok && val == "true" {
+		klog.InfoS("returning early as configuration is paused", "annotations[vmoperator.cluster.spectrocloud.com/paused]", val)
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+
 	if configuration.Spec.ProviderReference != nil && configuration.Spec.ProviderReference.Namespace == provider.DefaultNamespace {
 		configuration.Spec.ProviderReference.Namespace = configuration.Namespace
 	}
@@ -581,6 +587,9 @@ func (meta *TFConfigurationMeta) updateTerraformJobSecretIfNeeded(ctx context.Co
 	} else {
 		for k, v := range meta.VariableSecretData {
 			sec.Data[k] = v
+		}
+		if sec.Annotations == nil {
+			sec.Annotations = make(map[string]string)
 		}
 		sec.Annotations[VariableSecretHashAnnotationKey] = util.GenerateHash(sec.Data)
 		if err := k8sClient.Update(ctx, &sec); err != nil {
