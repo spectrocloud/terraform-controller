@@ -2,7 +2,6 @@ package configuration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -130,8 +129,6 @@ func Get(ctx context.Context, k8sClient client.Client, namespacedName apitypes.N
 // If deletable, it means no external cloud resources are provisioned
 func IsDeletable(ctx context.Context, k8sClient client.Client, configuration *v1beta1.Configuration) (bool, error) {
 	providerRef := GetProviderNamespacedName(*configuration)
-	out, _ := json.Marshal(providerRef)
-	klog.Info("======= IsDeletable ;kdmk;d", string(out))
 	providerObj, err := provider.GetProviderFromConfiguration(ctx, k8sClient, providerRef.Namespace, providerRef.Name)
 	if err != nil {
 		return false, err
