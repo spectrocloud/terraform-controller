@@ -128,6 +128,18 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// add finalizer
 	var isDeleting = !configuration.ObjectMeta.DeletionTimestamp.IsZero()
 	if !isDeleting {
+
+		if prvdr, err := provider.GetProviderFromConfiguration(ctx, r.Client, meta.ProviderReference.Namespace, meta.ProviderReference.Name); err != nil {
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, errors.Wrap(err, "failed to get provider object")
+		} else {
+			if !controllerutil.ContainsFinalizer(prvdr, configurationFinalizer) {
+				controllerutil.AddFinalizer(prvdr, configurationFinalizer)
+				if err := r.Update(ctx, prvdr); err != nil {
+					return ctrl.Result{RequeueAfter: 1 * time.Second}, errors.Wrap(err, "failed to add finalizer to provider object")
+				}
+			}
+		}
+
 		if !controllerutil.ContainsFinalizer(&configuration, configurationFinalizer) {
 			controllerutil.AddFinalizer(&configuration, configurationFinalizer)
 			if configuration.Spec.ProviderReference != nil && configuration.Spec.ProviderReference.Namespace == provider.DefaultNamespace {
@@ -183,6 +195,17 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 
 		removeFinalizerFunc := func() error {
+			if prvdr, err := provider.GetProviderFromConfiguration(ctx, r.Client, meta.ProviderReference.Namespace, meta.ProviderReference.Name); err != nil {
+				return client.IgnoreNotFound(err)
+			} else {
+				if controllerutil.ContainsFinalizer(prvdr, configurationFinalizer) {
+					controllerutil.RemoveFinalizer(prvdr, configurationFinalizer)
+					if err := r.Update(ctx, prvdr); err != nil {
+						return errors.Wrap(err, "failed to add finalizer to provider object")
+					}
+				}
+
+			}
 			if confi, err := tfcfg.Get(ctx, r.Client, req.NamespacedName); err != nil {
 				return client.IgnoreNotFound(err)
 			} else {
