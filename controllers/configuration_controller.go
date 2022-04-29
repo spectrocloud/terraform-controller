@@ -532,6 +532,16 @@ func (r *ConfigurationReconciler) preCheck(ctx context.Context, configuration *v
 func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClient client.Client, state types.ConfigurationState, message string) error {
 	var configuration v1beta1.Configuration
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.Name, Namespace: meta.Namespace}, &configuration); err == nil {
+
+		var phase types.Phase
+		if state == types.Available {
+			phase = types.ApplySuccessfull
+		} else if state == types.ConfigurationApplyFailed {
+			phase = types.ApplyFailed
+		} else if configuration.Status.Apply.Phase != "" {
+			phase = configuration.Status.Apply.Phase
+		}
+
 		configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
 			State:   state,
 			Message: message,
@@ -547,6 +557,7 @@ func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClien
 				configuration.Status.Apply.Outputs = outputs
 			}
 		}
+		configuration.Status.Apply.Phase = phase
 
 		return k8sClient.Status().Update(ctx, &configuration)
 	}

@@ -69,3 +69,10 @@ const (
 	// ProviderIsNotReady marks the state of a Provider is not ready
 	ProviderIsNotReady ProviderState = "ProviderNotReady"
 )
+
+type Phase string
+
+const (
+	ApplyFailed      Phase = "ApplyFailed"
+	ApplySuccessfull Phase = "ApplySuccessfull"
+)
