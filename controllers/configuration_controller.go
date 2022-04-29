@@ -545,7 +545,6 @@ func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClien
 		configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
 			State:   state,
 			Message: message,
-			Phase:   phase,
 		}
 		if state == types.Available {
 			outputs, err := meta.getTFOutputs(ctx, k8sClient, configuration)
@@ -558,6 +557,7 @@ func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClien
 				configuration.Status.Apply.Outputs = outputs
 			}
 		}
+		configuration.Status.Apply.Phase = phase
 
 		return k8sClient.Status().Update(ctx, &configuration)
 	}

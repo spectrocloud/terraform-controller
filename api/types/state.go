@@ -74,5 +74,5 @@ type Phase string
 
 const (
 	ApplyFailed      Phase = "ApplyFailed"
-	ApplySuccessfull Phase = "ApplySuccessFull"
+	ApplySuccessfull Phase = "ApplySuccessfull"
 )
