@@ -1763,6 +1763,8 @@ spec:
                           type: string
                       type: object
                     type: object
+                  phase:
+                    type: string
                   state:
                     description: A ConfigurationState represents the status of a resource
                     type: string

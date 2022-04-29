@@ -89,6 +89,7 @@ type ConfigurationStatus struct {
 // ConfigurationApplyStatus is the status for Configuration apply
 type ConfigurationApplyStatus struct {
 	State   state.ConfigurationState `json:"state,omitempty"`
+	Phase   state.Phase              `json:"phase,omitempty"`
 	Message string                   `json:"message,omitempty"`
 	Outputs map[string]Property      `json:"outputs,omitempty"`
 }
