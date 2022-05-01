@@ -540,6 +540,8 @@ func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClien
 			phase = types.ApplyFailed
 		} else if configuration.Status.Apply.Phase != "" {
 			phase = configuration.Status.Apply.Phase
+		} else {
+			phase = types.ApplyPending
 		}
 
 		configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
