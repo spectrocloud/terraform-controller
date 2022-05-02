@@ -131,7 +131,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 		if prvdr, err := provider.GetProviderFromConfiguration(ctx, r.Client, meta.ProviderReference.Namespace, meta.ProviderReference.Name); err != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Second}, errors.Wrap(err, "failed to get provider object")
-		} else {
+		} else if prvdr != nil {
 			if !controllerutil.ContainsFinalizer(prvdr, configurationFinalizer) {
 				controllerutil.AddFinalizer(prvdr, configurationFinalizer)
 				if err := r.Update(ctx, prvdr); err != nil {
@@ -197,7 +197,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		removeFinalizerFunc := func() error {
 			if prvdr, err := provider.GetProviderFromConfiguration(ctx, r.Client, meta.ProviderReference.Namespace, meta.ProviderReference.Name); err != nil {
 				return client.IgnoreNotFound(err)
-			} else {
+			} else if prvdr != nil {
 				if controllerutil.ContainsFinalizer(prvdr, configurationFinalizer) {
 					controllerutil.RemoveFinalizer(prvdr, configurationFinalizer)
 					if err := r.Update(ctx, prvdr); err != nil {
@@ -598,6 +598,11 @@ func (meta *TFConfigurationMeta) assembleAndTriggerJob(ctx context.Context, k8sC
 	}
 
 	job := meta.assembleTerraformJob(executionType, configuration)
+
+	if err := meta.updateApplyStatus(ctx, k8sClient, types.ConfigurationProvisioningAndChecking, types.MessageCloudResourceProvisioningAndChecking); err != nil {
+		return err
+	}
+
 	return k8sClient.Create(ctx, job)
 }
 
