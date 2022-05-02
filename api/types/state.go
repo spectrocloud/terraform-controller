@@ -73,6 +73,10 @@ const (
 type Phase string
 
 const (
-	ApplyFailed      Phase = "ApplyFailed"
+	// ApplyFailed is set when the job is not successfull
+	ApplyFailed Phase = "ApplyFailed"
+	// ApplySuccessfull is set when the job is successfull
 	ApplySuccessfull Phase = "ApplySuccessfull"
+	// ApplyPending is set when the job is still running
+	ApplyPending Phase = "ApplyPending"
 )
