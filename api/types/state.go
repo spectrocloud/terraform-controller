@@ -33,6 +33,7 @@ const (
 	ConfigurationReloading               ConfigurationState = "ConfigurationReloading"
 	GeneratingOutputs                    ConfigurationState = "GeneratingTerraformOutputs"
 	InvalidRegion                        ConfigurationState = "InvalidRegion"
+	DestroyCompleted                     ConfigurationState = "DestroyCompleted"
 )
 
 const (
@@ -58,6 +59,8 @@ const (
 	ConfigurationReloadingAsVariableChanged = "Configuration's variable has changed, and starts reloading"
 	// ErrGenerateOutputs means error to generate outputs
 	ErrGenerateOutputs = "Hit an issue to generate outputs"
+	// ErrGenerateOutputs means error to generate outputs
+	MessageDestroyCompleted = "Cloud resources destroyed"
 )
 
 // ProviderState is the type for Provider state
