@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager 
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM golang:1.16
+FROM alpine:3.15
 WORKDIR /
 COPY --from=builder /workspace/manager .
 #USER nonroot:nonroot
@@ -27,6 +27,6 @@ COPY --from=builder /workspace/manager .
 # COPY terraform binary
 COPY bin/terraform /usr/bin/terraform
 #RUN chmod +x /usr/bin/terraform
-RUN apt-get install git
+RUN apk add --no-cache git
 
 ENTRYPOINT ["/manager"]
