@@ -175,6 +175,14 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: meta.DestroyJobName, Namespace: meta.Namespace}, tfExecutionJob); err == nil {
+		if tfExecutionJob.Status.Succeeded == int32(1) {
+			if err := meta.updateApplyStatus(ctx, r.Client, types.DestroyCompleted, types.MessageDestroyCompleted); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
 	if isDeleting {
 		// terraform destroy
 		klog.InfoS("performing Configuration Destroy", "Namespace", req.Namespace, "Name", req.Name, "JobName", meta.DestroyJobName)
@@ -244,6 +252,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if updateErr := meta.updateApplyStatus(ctx, r.Client, state, err.Error()); updateErr != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, updateErr
 		}
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	return ctrl.Result{}, nil
