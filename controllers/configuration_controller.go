@@ -837,6 +837,27 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 	}
 }
 
+func (meta *TFConfigurationMeta) getPrePostExecCommandEnvs(configuration *v1beta1.Configuration) []v1.EnvVar {
+	envVar := []v1.EnvVar{}
+	if configuration.Spec.PreExecCommand != nil {
+		preExecCmd := v1.EnvVar{
+			Name:  "PREEXECCMD",
+			Value: *configuration.Spec.PreExecCommand,
+		}
+
+		envVar = append(envVar, preExecCmd)
+	}
+	if configuration.Spec.PostExecCommand != nil {
+		preExecCmd := v1.EnvVar{
+			Name:  "POSTEXECCMD",
+			Value: *configuration.Spec.PostExecCommand,
+		}
+
+		envVar = append(envVar, preExecCmd)
+	}
+	return envVar
+}
+
 func (meta *TFConfigurationMeta) assembleExecutorVolumes(configuration *v1beta1.Configuration) []v1.Volume {
 	workingVolume := v1.Volume{Name: meta.Name}
 	workingVolume.EmptyDir = &v1.EmptyDirVolumeSource{}
@@ -997,6 +1018,11 @@ func (meta *TFConfigurationMeta) prepareTFVariables(configuration *v1beta1.Confi
 		valueFrom.SecretKeyRef.Name = meta.VariableSecretName
 		envs = append(envs, v1.EnvVar{Name: k, ValueFrom: valueFrom})
 	}
+
+	if prePostEnvs := meta.getPrePostExecCommandEnvs(configuration); len(prePostEnvs) != 0 {
+		envs = append(envs, prePostEnvs...)
+	}
+
 	meta.Envs = envs
 	meta.VariableSecretData = data
 

@@ -52,6 +52,14 @@ type ConfigurationSpec struct {
 	Path string `json:"path,omitempty"`
 
 	BaseConfigurationSpec `json:",inline"`
+
+	// PreExecCommand runs commmands prior to terraform init
+	// +optional
+	PreExecCommand *string `json:"preExecCommand,omitempty"`
+
+	// PostExecCommand runs commmands post terraform init
+	// +optional
+	PostExecCommand *string `json:"postExecCommand,omitempty"`
 }
 
 type VolumeSpec struct {
