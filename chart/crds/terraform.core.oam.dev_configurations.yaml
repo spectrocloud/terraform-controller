@@ -74,6 +74,12 @@ spec:
               path:
                 description: Path is the sub-directory of remote git repository.
                 type: string
+              postExecCommand:
+                description: PostExecCommand runs commmands post terraform init
+                type: string
+              preExecCommand:
+                description: PreExecCommand runs commmands prior to terraform init
+                type: string
               providerRef:
                 description: ProviderReference specifies the reference to Provider
                 properties:
