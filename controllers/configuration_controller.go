@@ -17,7 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -664,18 +663,18 @@ func (meta *TFConfigurationMeta) updateTerraformJobIfNeeded(ctx context.Context,
 	}
 
 	var envChanged bool
-	for k, v := range variableInSecret.Data {
-		if val, ok := meta.VariableSecretData[k]; ok {
-			if (string(val) != "FROM_SECRET_REF" && !bytes.Equal(v, val)) ||
-				(variableInSecret.Annotations[VariableSecretHashAnnotationKey] != util.GenerateHash(meta.VariableSecretData)) {
-				envChanged = true
-				klog.Info(fmt.Sprintf("Job's env changed %s %s, %s", k, v, val))
-				if err := meta.updateApplyStatus(ctx, k8sClient, types.ConfigurationReloading, types.ConfigurationReloadingAsVariableChanged); err != nil {
-					return err
-				}
-			}
-		}
-	}
+	// for k, v := range variableInSecret.Data {
+	// 	if val, ok := meta.VariableSecretData[k]; ok {
+	// 		if (string(val) != "FROM_SECRET_REF" && !bytes.Equal(v, val)) ||
+	// 			(variableInSecret.Annotations[VariableSecretHashAnnotationKey] != util.GenerateHash(meta.VariableSecretData)) {
+	// 			envChanged = true
+	// 			klog.Info(fmt.Sprintf("Job's env changed %s %s, %s", k, v, val))
+	// 			if err := meta.updateApplyStatus(ctx, k8sClient, types.ConfigurationReloading, types.ConfigurationReloadingAsVariableChanged); err != nil {
+	// 				return err
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	// if either one changes, delete the job
 	if envChanged || meta.ConfigurationChanged {
