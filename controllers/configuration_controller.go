@@ -1031,6 +1031,16 @@ func (meta *TFConfigurationMeta) prepareTFVariables(configuration *v1beta1.Confi
 		envs = append(envs, prePostEnvs...)
 	}
 
+	job_status := v1.EnvVar{
+		Name:  "JOB_STATUS",
+		Value: "ApplyPending",
+	}
+	if configuration.Status.Apply.Phase != "" {
+		job_status.Value = string(configuration.Status.Apply.Phase)
+	}
+
+	envs = append(envs, job_status)
+
 	meta.Envs = envs
 	meta.VariableSecretData = data
 
