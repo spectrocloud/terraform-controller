@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
@@ -143,6 +144,9 @@ func GetProviderCredentials(ctx context.Context, k8sClient client.Client, provid
 			secretRef.Namespace = provider.Namespace
 		}
 		if err := k8sClient.Get(ctx, client.ObjectKey{Name: secretRef.Name, Namespace: secretRef.Namespace}, &secret); err != nil {
+			if kerrors.IsNotFound(err) {
+				return map[string]string{}, nil
+			}
 			errMsg := "failed to get the Secret from Provider"
 			klog.ErrorS(err, errMsg, "Name", secretRef.Name, "Namespace", secretRef.Namespace)
 			return nil, errors.Wrap(err, errMsg)
