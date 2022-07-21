@@ -175,9 +175,22 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			// if job is 5 minutes older and has not succeeded then delete it..
 			startTime := tfExecutionJob.Status.StartTime
 			if startTime != nil && startTime.Add(5*time.Minute).Before(time.Now()) {
-				klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
-				if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
-					return ctrl.Result{}, err
+				pods := &v1.PodList{}
+				r.Client.List(ctx, pods, client.MatchingLabels(map[string]string{"job-name": meta.ApplyJobName}),
+					client.InNamespace(meta.Namespace),
+				)
+				donotDeleteJob := false
+				for _, pod := range pods.Items {
+					if pod.Status.Phase == v1.PodRunning {
+						donotDeleteJob = true
+						break
+					}
+				}
+				if !donotDeleteJob {
+					klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
+					if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
+						return ctrl.Result{}, err
+					}
 				}
 			}
 		}
