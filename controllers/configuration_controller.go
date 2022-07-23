@@ -179,14 +179,20 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				r.Client.List(ctx, pods, client.MatchingLabels(map[string]string{"job-name": meta.ApplyJobName}),
 					client.InNamespace(meta.Namespace),
 				)
-				donotDeleteJob := false
+				deleteJob := false
 				for _, pod := range pods.Items {
-					if pod.Status.Phase == v1.PodRunning {
-						donotDeleteJob = true
+					if pod.Status.Phase != v1.PodRunning {
+						deleteJob = true
 						break
 					}
+					for _, container := range pod.Status.ContainerStatuses {
+						if container.RestartCount > 5 {
+							deleteJob = true
+							break
+						}
+					}
 				}
-				if !donotDeleteJob {
+				if deleteJob {
 					klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
 					if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 						return ctrl.Result{}, err
