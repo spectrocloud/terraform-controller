@@ -663,6 +663,9 @@ func (meta *TFConfigurationMeta) updateTerraformJobSecretIfNeeded(ctx context.Co
 		}
 	} else {
 		for k, v := range meta.VariableSecretData {
+			if sec.Data == nil {
+				sec.Data = make(map[string][]byte)
+			}
 			sec.Data[k] = v
 		}
 		if sec.Annotations == nil {
