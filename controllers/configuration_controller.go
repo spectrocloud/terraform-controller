@@ -830,6 +830,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
 						"spectrocloud.com/connection": "proxy",
+						"spectrocloud.com/monitor":    "skip",
 					},
 				},
 				Spec: v1.PodSpec{
