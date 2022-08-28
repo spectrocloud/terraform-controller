@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	"github.com/acarl005/stripansi"
 	"github.com/oam-dev/terraform-controller/api/types"
 	crossplane "github.com/oam-dev/terraform-controller/api/types/crossplane-runtime"
 	"github.com/oam-dev/terraform-controller/api/v1beta1"
@@ -582,14 +583,14 @@ func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClien
 
 		configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
 			State:   state,
-			Message: message,
+			Message: stripansi.Strip(message),
 		}
 		if state == types.Available {
 			outputs, err := meta.getTFOutputs(ctx, k8sClient, configuration)
 			if err != nil {
 				configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
 					State:   types.GeneratingOutputs,
-					Message: types.ErrGenerateOutputs + ": " + err.Error(),
+					Message: stripansi.Strip(types.ErrGenerateOutputs + ": " + err.Error()),
 				}
 			} else {
 				configuration.Status.Apply.Outputs = outputs
@@ -607,7 +608,7 @@ func (meta *TFConfigurationMeta) updateDestroyStatus(ctx context.Context, k8sCli
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.Name, Namespace: meta.Namespace}, &configuration); err == nil {
 		configuration.Status.Destroy = v1beta1.ConfigurationDestroyStatus{
 			State:   state,
-			Message: message,
+			Message: stripansi.Strip(message),
 		}
 		return k8sClient.Status().Update(ctx, &configuration)
 	}

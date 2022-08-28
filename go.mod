@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/Masterminds/sprig/v3 v3.2.2
+	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/agiledragon/gomonkey/v2 v2.4.0
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1384
 	github.com/ghodss/yaml v1.0.0
