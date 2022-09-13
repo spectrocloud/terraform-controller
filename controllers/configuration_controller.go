@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	"github.com/acarl005/stripansi"
 	"github.com/oam-dev/terraform-controller/api/types"
 	crossplane "github.com/oam-dev/terraform-controller/api/types/crossplane-runtime"
 	"github.com/oam-dev/terraform-controller/api/v1beta1"
@@ -217,7 +218,8 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		_, err := terraform.GetTerraformStatus(ctx, meta.Namespace, meta.DestroyJobName)
 		if err != nil {
 			klog.ErrorS(err, "Terraform destroy failed")
-			if updateErr := meta.updateDestroyStatus(ctx, r.Client, types.ConfigurationDestroyFailed, err.Error()); updateErr != nil {
+			msg := stripansi.Strip(err.Error())
+			if updateErr := meta.updateDestroyStatus(ctx, r.Client, types.ConfigurationDestroyFailed, msg); updateErr != nil {
 				return ctrl.Result{}, updateErr
 			}
 		}
@@ -275,7 +277,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	state, err := terraform.GetTerraformStatus(ctx, meta.Namespace, meta.ApplyJobName)
 	if err != nil {
-		klog.ErrorS(err, "Terraform apply failed")
+		klog.Error(stripansi.Strip(err.Error()), "Terraform apply failed")
 		if updateErr := meta.updateApplyStatus(ctx, r.Client, state, err.Error()); updateErr != nil {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, updateErr
 		}
@@ -550,10 +552,11 @@ func (r *ConfigurationReconciler) preCheck(ctx context.Context, configuration *v
 		if err != nil {
 			msg = err.Error()
 		}
-		if updateStatusErr := meta.updateApplyStatus(ctx, k8sClient, types.Authorizing, msg); updateStatusErr != nil {
-			return errors.Wrap(updateStatusErr, msg)
+		message := stripansi.Strip(msg)
+		if updateStatusErr := meta.updateApplyStatus(ctx, k8sClient, types.Authorizing, message); updateStatusErr != nil {
+			return errors.Wrap(updateStatusErr, message)
 		}
-		return errors.New(msg)
+		return errors.New(message)
 	}
 
 	//TODO check here
@@ -582,14 +585,14 @@ func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClien
 
 		configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
 			State:   state,
-			Message: message,
+			Message: stripansi.Strip(message),
 		}
 		if state == types.Available {
 			outputs, err := meta.getTFOutputs(ctx, k8sClient, configuration)
 			if err != nil {
 				configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
 					State:   types.GeneratingOutputs,
-					Message: types.ErrGenerateOutputs + ": " + err.Error(),
+					Message: stripansi.Strip(types.ErrGenerateOutputs + ": " + err.Error()),
 				}
 			} else {
 				configuration.Status.Apply.Outputs = outputs
@@ -607,7 +610,7 @@ func (meta *TFConfigurationMeta) updateDestroyStatus(ctx context.Context, k8sCli
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.Name, Namespace: meta.Namespace}, &configuration); err == nil {
 		configuration.Status.Destroy = v1beta1.ConfigurationDestroyStatus{
 			State:   state,
-			Message: message,
+			Message: stripansi.Strip(message),
 		}
 		return k8sClient.Status().Update(ctx, &configuration)
 	}
