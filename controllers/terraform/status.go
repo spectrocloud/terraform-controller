@@ -9,6 +9,8 @@ import (
 
 	"github.com/oam-dev/terraform-controller/api/types"
 	"github.com/oam-dev/terraform-controller/controllers/client"
+
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // GetTerraformStatus will get Terraform execution status
@@ -22,6 +24,10 @@ func GetTerraformStatus(ctx context.Context, namespace, jobName string) (types.C
 
 	logs, err := getPodLog(ctx, clientSet, namespace, jobName)
 	if err != nil {
+		if apierrs.IsNotFound(err) {
+			klog.V(2).ErrorS(err, "failed to get pod logs")
+			return types.ConfigurationProvisioningAndChecking, nil
+		}
 		klog.ErrorS(err, "failed to get pod logs")
 		return types.ConfigurationProvisioningAndChecking, err
 	}

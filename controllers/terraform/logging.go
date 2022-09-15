@@ -16,7 +16,7 @@ func getPodLog(ctx context.Context, client kubernetes.Interface, namespace, jobN
 	label := fmt.Sprintf("job-name=%s", jobName)
 	pods, err := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: label})
 	if err != nil || pods == nil || len(pods.Items) == 0 {
-		klog.InfoS("pods are not found", "Label", label, "Error", err)
+		klog.V(2).Info("pods are not found", "Label", label, "Error", err)
 		return "", nil
 	}
 	pod := pods.Items[0]
