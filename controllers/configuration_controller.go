@@ -583,10 +583,13 @@ func (meta *TFConfigurationMeta) updateApplyStatus(ctx context.Context, k8sClien
 			phase = types.ApplyPending
 		}
 
-		configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
-			State:   state,
-			Message: stripansi.Strip(message),
+		if !(phase == types.ApplyFailed && state == types.ConfigurationProvisioningAndChecking && message == types.MessageCloudResourceProvisioningAndChecking) {
+			configuration.Status.Apply = v1beta1.ConfigurationApplyStatus{
+				State:   state,
+				Message: stripansi.Strip(message),
+			}
 		}
+
 		if state == types.Available {
 			outputs, err := meta.getTFOutputs(ctx, k8sClient, configuration)
 			if err != nil {
