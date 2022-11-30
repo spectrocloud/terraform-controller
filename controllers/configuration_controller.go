@@ -85,6 +85,9 @@ const (
 
 const (
 	configurationFinalizer = "configuration.finalizers.terraform-controller"
+	// Terraform pod finalizer to ensure apply pod is not deleted by external source while creating a resource.
+	// Note: This is a standard finalizer from k8s.io/kubernetes/pkg/apis/core.FinalizerKubernetes.
+	ApplyPodFinalizer = "kubernetes"
 	// ClusterRoleName is the name of the ClusterRole for Terraform Job
 	ClusterRoleName = "tf-executor-clusterrole"
 	// ServiceAccountName is the name of the ServiceAccount for Terraform Job
@@ -164,10 +167,13 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				return ctrl.Result{}, err
 			}
 
-			//if job is 2 minutes older than delete it..
+			//if job is 2 minutes older and it has completed than delete it..
 			compTime := tfExecutionJob.Status.CompletionTime
 			if compTime != nil && compTime.Add(2*time.Minute).Before(time.Now()) {
 				klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
+				if err := meta.removeApplyFinalizerFromApplyJobPod(ctx, r.Client); err != nil {
+					return ctrl.Result{}, err
+				}
 				if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -182,12 +188,27 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				)
 				deleteJob := false
 				for _, pod := range pods.Items {
+					// The pod is 5 minutes older and is not in running phase delete it.
 					if pod.Status.Phase != v1.PodRunning {
+						patch := client.MergeFrom(pod.DeepCopy())
+						controllerutil.RemoveFinalizer(&pod, ApplyPodFinalizer)
+						err := r.Client.Patch(ctx, &pod, patch)
+						if err != nil {
+							return ctrl.Result{}, err
+						}
 						deleteJob = true
 						break
 					}
 					for _, container := range pod.Status.ContainerStatuses {
 						if container.RestartCount > 5 {
+							// the pod has tried terraform apply more than 5 times, delete the job as it has not yet succeeded.
+							patch := client.MergeFrom(pod.DeepCopy())
+							controllerutil.RemoveFinalizer(&pod, ApplyPodFinalizer)
+							r.Client.Patch(ctx, &pod, patch)
+							err := r.Client.Patch(ctx, &pod, patch)
+							if err != nil {
+								return ctrl.Result{}, err
+							}
 							deleteJob = true
 							break
 						}
@@ -448,6 +469,9 @@ func (r *ConfigurationReconciler) terraformDestroy(ctx context.Context, namespac
 		// 3. delete apply job
 		var applyJob batchv1.Job
 		if err := k8sClient.Get(ctx, client.ObjectKey{Name: meta.ApplyJobName, Namespace: namespace}, &applyJob); err == nil {
+			if err := meta.removeApplyFinalizerFromApplyJobPod(ctx, r.Client); err != nil {
+				return err
+			}
 			if err := k8sClient.Delete(ctx, &applyJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 				return err
 			}
@@ -838,6 +862,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 						"spectrocloud.com/connection": "proxy",
 						"spectrocloud.com/monitor":    "skip",
 					},
+					Finalizers: getPodFinalizers(executionType),
 				},
 				Spec: v1.PodSpec{
 					ImagePullSecrets: pullSecrets,
@@ -1207,22 +1232,26 @@ func (meta *TFConfigurationMeta) getCredentials(ctx context.Context, k8sClient c
 	return nil
 }
 
-//apiVersion: v1
-//data:
-//TF_VAR_NETWORK_WAN: dnRuZXQw
-//TF_VAR_NETWORK_LAN: dnRuZXQx
-//TF_VAR_IP_ADDR_WAN: ZGhjcA==
-//TF_VAR_IP_ADDR_LAN: MTkyLjE2OC4xMDAuMg==
-//TF_VAR_SUBNET_WAN: ""
-//TF_VAR_SUBNET_LAN: MjQ=
-//TF_VAR_DHCP_RANGE_START: MTkyLjE2OC4xMDAuNTA=
-//TF_VAR_DHCP_RANGE_END: MTkyLjE2OC4xMDAuMjAw
-//TF_VAR_VM_NAME: cGZzZW5zZS12bS1vcGVyYXRvcg==
-//TF_VAR_HOST_IP: My43MC4yMTAuNA==
-//TF_VAR_SSH_USER: cm9vdA==
-//TF_VAR_SSH_KEY: L3Zhci9rZXlzL3NzaC1rZXk=
-//kind: Secret
-//metadata:
-//name: variable-custom-example
-//namespace: default
-//type: Opaque
+func getPodFinalizers(executionType TerraformExecutionType) []string {
+	finalizers := []string{}
+	if executionType == TerraformApply {
+		finalizers = append(finalizers, ApplyPodFinalizer)
+	}
+	return finalizers
+}
+
+func (meta *TFConfigurationMeta) removeApplyFinalizerFromApplyJobPod(ctx context.Context, k8sClient client.Client) error {
+	// remove finalizer
+	pods := &v1.PodList{}
+	k8sClient.List(ctx, pods, client.MatchingLabels(map[string]string{"job-name": meta.ApplyJobName}),
+		client.InNamespace(meta.Namespace),
+	)
+	for _, pod := range pods.Items {
+		patch := client.MergeFrom(pod.DeepCopy())
+		controllerutil.RemoveFinalizer(&pod, ApplyPodFinalizer)
+		if err := k8sClient.Patch(ctx, &pod, patch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
