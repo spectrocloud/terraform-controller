@@ -3,6 +3,7 @@ module github.com/oam-dev/terraform-controller
 go 1.16
 
 require (
+	github.com/Azure/go-autorest/autorest/to v0.4.0
 	github.com/Masterminds/sprig/v3 v3.2.2
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/agiledragon/gomonkey/v2 v2.4.0

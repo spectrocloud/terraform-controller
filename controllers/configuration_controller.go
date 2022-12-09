@@ -26,6 +26,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
@@ -839,10 +840,12 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 					Labels: map[string]string{
 						"spectrocloud.com/connection": "proxy",
 						"spectrocloud.com/monitor":    "skip",
+						"app":                         "terraform-controller-job",
 					},
 				},
 				Spec: v1.PodSpec{
-					ImagePullSecrets: pullSecrets,
+					TerminationGracePeriodSeconds: to.Int64Ptr(300),
+					ImagePullSecrets:              pullSecrets,
 					// InitContainer will copy Terraform configuration files to working directory and create Terraform
 					// state file directory in advance
 					InitContainers: initContainers,
