@@ -844,7 +844,7 @@ func (meta *TFConfigurationMeta) assembleTerraformJob(executionType TerraformExe
 					},
 				},
 				Spec: v1.PodSpec{
-					TerminationGracePeriodSeconds: to.Int64Ptr(300),
+					TerminationGracePeriodSeconds: to.Int64Ptr(600),
 					ImagePullSecrets:              pullSecrets,
 					// InitContainer will copy Terraform configuration files to working directory and create Terraform
 					// state file directory in advance
@@ -1086,8 +1086,8 @@ func (r *ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1beta1.Configuration{}).
 		WithOptions(controller.Options{
-			RateLimiter: workqueue.NewItemExponentialFailureRateLimiter(30 * time.Second, 2 * time.Minute),
-		}).		
+			RateLimiter: workqueue.NewItemExponentialFailureRateLimiter(30*time.Second, 2*time.Minute),
+		}).
 		Complete(r)
 }
 
