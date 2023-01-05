@@ -179,24 +179,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			// if job is 5 minutes older and has not succeeded then delete it..
 			startTime := tfExecutionJob.Status.StartTime
 			if startTime != nil && startTime.Add(5*time.Minute).Before(time.Now()) {
-				pods := &v1.PodList{}
-				r.Client.List(ctx, pods, client.MatchingLabels(map[string]string{"job-name": meta.ApplyJobName}),
-					client.InNamespace(meta.Namespace),
-				)
-				deleteJob := false
-				for _, pod := range pods.Items {
-					if pod.Status.Phase != v1.PodRunning {
-						deleteJob = true
-						break
-					}
-					for _, container := range pod.Status.ContainerStatuses {
-						if container.RestartCount > 5 {
-							deleteJob = true
-							break
-						}
-					}
-				}
-				if deleteJob {
+				if deleteJob := isSafeToDeleteJob(ctx, r.Client, tfExecutionJob.Name, meta.Namespace); deleteJob {
 					klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
 					if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 						return ctrl.Result{}, err
@@ -702,7 +685,7 @@ func (meta *TFConfigurationMeta) updateTerraformJobIfNeeded(ctx context.Context,
 		return err
 	}
 
-	var envChanged bool
+	// var envChanged bool
 	// for k, v := range variableInSecret.Data {
 	// 	if val, ok := meta.VariableSecretData[k]; ok {
 	// 		if (string(val) != "FROM_SECRET_REF" && !bytes.Equal(v, val)) ||
@@ -717,10 +700,13 @@ func (meta *TFConfigurationMeta) updateTerraformJobIfNeeded(ctx context.Context,
 	// }
 
 	// if either one changes, delete the job
-	if envChanged || meta.ConfigurationChanged {
+
+	if meta.ConfigurationChanged && isSafeToDeleteJob(ctx, k8sClient, job.Name, job.Namespace) {
+
 		klog.InfoS("about to delete job", "Name", job.Name, "Namespace", job.Namespace)
 		var j batchv1.Job
 		if err := k8sClient.Get(ctx, client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, &j); err == nil {
+
 			if deleteErr := k8sClient.Delete(ctx, &job, client.PropagationPolicy(metav1.DeletePropagationBackground)); deleteErr != nil {
 				return deleteErr
 			}
@@ -1215,22 +1201,24 @@ func (meta *TFConfigurationMeta) getCredentials(ctx context.Context, k8sClient c
 	return nil
 }
 
-//apiVersion: v1
-//data:
-//TF_VAR_NETWORK_WAN: dnRuZXQw
-//TF_VAR_NETWORK_LAN: dnRuZXQx
-//TF_VAR_IP_ADDR_WAN: ZGhjcA==
-//TF_VAR_IP_ADDR_LAN: MTkyLjE2OC4xMDAuMg==
-//TF_VAR_SUBNET_WAN: ""
-//TF_VAR_SUBNET_LAN: MjQ=
-//TF_VAR_DHCP_RANGE_START: MTkyLjE2OC4xMDAuNTA=
-//TF_VAR_DHCP_RANGE_END: MTkyLjE2OC4xMDAuMjAw
-//TF_VAR_VM_NAME: cGZzZW5zZS12bS1vcGVyYXRvcg==
-//TF_VAR_HOST_IP: My43MC4yMTAuNA==
-//TF_VAR_SSH_USER: cm9vdA==
-//TF_VAR_SSH_KEY: L3Zhci9rZXlzL3NzaC1rZXk=
-//kind: Secret
-//metadata:
-//name: variable-custom-example
-//namespace: default
-//type: Opaque
+func isSafeToDeleteJob(ctx context.Context, cli client.Client, applyJobName, namespace string) bool {
+
+	pods := &v1.PodList{}
+	cli.List(ctx, pods, client.MatchingLabels(map[string]string{"job-name": applyJobName}),
+		client.InNamespace(namespace),
+	)
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == v1.PodRunning {
+			return false
+		}
+	}
+
+	for _, pod := range pods.Items {
+		for _, container := range pod.Status.ContainerStatuses {
+			if container.RestartCount < 5 {
+				return false
+			}
+		}
+	}
+	return true
+}
