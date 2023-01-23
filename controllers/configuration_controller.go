@@ -1208,8 +1208,10 @@ func isSafeToDeleteJob(ctx context.Context, cli client.Client, applyJobName, nam
 		client.InNamespace(namespace),
 	)
 	for _, pod := range pods.Items {
-		if pod.Status.Phase == v1.PodRunning {
-			return false
+		for _, container := range pod.Status.ContainerStatuses {
+			if container.State.Running != nil {
+				return false
+			}
 		}
 	}
 
