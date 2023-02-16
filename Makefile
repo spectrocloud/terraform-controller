@@ -65,6 +65,11 @@ generate: controller-gen
 docker-build: test
 	docker build . -t ${IMG}
 
+# Build the docker image
+# docker build . -t ${IMG}
+docker-build-m1-chip: 
+	docker buildx build --platform linux/amd64 -t ${IMG} . 
+
 # Push the docker image
 docker-push:
 	docker push ${IMG}

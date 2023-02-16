@@ -1203,6 +1203,7 @@ func (meta *TFConfigurationMeta) getCredentials(ctx context.Context, k8sClient c
 
 func isSafeToDeleteJob(ctx context.Context, cli client.Client, applyJobName, namespace string) bool {
 
+	klog.InfoS("isSafeToDeleteJob configuration")
 	pods := &v1.PodList{}
 	cli.List(ctx, pods, client.MatchingLabels(map[string]string{"job-name": applyJobName}),
 		client.InNamespace(namespace),
