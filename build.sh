@@ -1,7 +1,7 @@
 #!/bin/sh
 set -x
 tag=$(date +%Y%m%d)
-export IMG=lochan2120/terraform-controller:$tag
+export IMG=gcr.io/spectro-dev-public/${USER}/terraform-controller:$tag
 make docker-build-m1-chip
 make docker-push
 
