@@ -21,12 +21,16 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager 
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM alpine:3.17.2
 WORKDIR /
-COPY --from=builder /workspace/manager .
-#USER nonroot:nonroot
 
 # COPY terraform binary
 COPY bin/terraform /usr/bin/terraform
 #RUN chmod +x /usr/bin/terraform
 RUN apk add --no-cache git
 
-ENTRYPOINT ["/manager"]
+RUN adduser -D tcuser
+WORKDIR /home/tcuser
+COPY --from=builder /workspace/manager .
+RUN chown -R tcuser:tcuser .
+USER tcuser
+
+ENTRYPOINT ["/home/tcuser/manager"]
