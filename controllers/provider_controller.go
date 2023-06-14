@@ -53,7 +53,7 @@ type ProviderReconciler struct {
 
 // Reconcile will reconcile periodically
 func (r *ProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	klog.InfoS("reconciling Terraform Provider...", "NamespacedName", req.NamespacedName)
+	klog.V(1).Info("reconciling Terraform Provider...", "NamespacedName", req.NamespacedName)
 
 	var provider terraformv1beta1.Provider
 

@@ -170,7 +170,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			//if job is 2 minutes older than delete it..
 			compTime := tfExecutionJob.Status.CompletionTime
 			if compTime != nil && compTime.Add(2*time.Minute).Before(time.Now()) {
-				klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
+				klog.Info("reconcile delete older job: ", tfExecutionJob.Name)
 				if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 					return ctrl.Result{}, err
 				}
@@ -180,7 +180,7 @@ func (r *ConfigurationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			startTime := tfExecutionJob.Status.StartTime
 			if startTime != nil && startTime.Add(5*time.Minute).Before(time.Now()) {
 				if deleteJob := isSafeToDeleteJob(ctx, r.Client, tfExecutionJob.Name, meta.Namespace); deleteJob {
-					klog.Info("Deleting job %s as to reconcile it", tfExecutionJob.Name)
+					klog.Info("reconcile delete older job: ", tfExecutionJob.Name)
 					if err := r.Client.Delete(ctx, tfExecutionJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
 						return ctrl.Result{}, err
 					}

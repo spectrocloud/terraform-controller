@@ -1,6 +1,7 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= oamdev/terraform-controller:0.2.8
+IMG ?= gcr.io/spectro-dev-public/${USER}/terraform-controller:$(shell date +%Y%m%d)
+BULWARK_IMG ?= gcr.io/spectro-bulwark/${USER}/terraform-controller:$(shell date +%Y%m%d)
 
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
@@ -69,6 +70,10 @@ docker-build: test
 # docker build . -t ${IMG}
 docker-build-m1-chip: 
 	docker buildx build --platform linux/amd64 -t ${IMG} . 
+
+docker-bulwark: 
+	docker buildx build --platform linux/amd64 -t ${BULWARK_IMG} .
+	docker push ${BULWARK_IMG}
 
 # Push the docker image
 docker-push:

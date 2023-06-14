@@ -150,13 +150,13 @@ func IsDeletable(ctx context.Context, k8sClient client.Client, configuration *v1
 
 // ReplaceTerraformSource will replace the Terraform source from GitHub to Gitee
 func ReplaceTerraformSource(remote string, githubBlockedStr string) string {
-	klog.InfoS("Whether GitHub is blocked", "githubBlocked", githubBlockedStr)
+	klog.V(1).Info("Whether GitHub is blocked", "githubBlocked", githubBlockedStr)
 	githubBlocked, err := strconv.ParseBool(githubBlockedStr)
 	if err != nil {
 		klog.Warningf(errGitHubBlockedNotBoolean, err)
 		return remote
 	}
-	klog.InfoS("Parsed GITHUB_BLOCKED env", "githubBlocked", githubBlocked)
+	klog.V(1).Info("Parsed GITHUB_BLOCKED env", "githubBlocked", githubBlocked)
 
 	if !githubBlocked {
 		return remote
