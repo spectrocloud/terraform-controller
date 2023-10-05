@@ -1,5 +1,6 @@
 # Build the manager binary
-FROM golang:1.20.4 as builder
+ARG BUILDER_GOLANG_VERSION
+FROM --platform=$TARGETPLATFORM gcr.io/spectro-images-public/golang:${BUILDER_GOLANG_VERSION}-alpine as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -19,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager 
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/spectro-images-public/golang:1.19-alpine
+FROM alpine:3.18
 WORKDIR /
 COPY --from=builder /workspace/manager .
 #USER nonroot:nonroot

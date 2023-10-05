@@ -2,7 +2,8 @@
 # Image URL to use all building/pushing image targets
 IMG ?= gcr.io/spectro-dev-public/${USER}/terraform-controller:$(shell date +%Y%m%d)
 BULWARK_IMG ?= gcr.io/spectro-bulwark/${USER}/terraform-controller:$(shell date +%Y%m%d)
-
+BUILDER_GOLANG_VERSION ?= 1.21
+BUILD_ARGS = --build-arg BUILDER_GOLANG_VERSION=${BUILDER_GOLANG_VERSION}
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -64,15 +65,10 @@ generate: controller-gen
 
 # Build the docker image
 docker-build: test
-	docker build . -t ${IMG}
-
-# Build the docker image
-# docker build . -t ${IMG}
-docker-build-m1-chip: 
-	docker buildx build --platform linux/amd64 -t ${IMG} . 
+	docker buildx build --platform linux/amd64 ${BUILD_ARGS} -t ${IMG} . 
 
 docker-bulwark: 
-	docker buildx build --platform linux/amd64 -t ${BULWARK_IMG} .
+	docker buildx build --platform linux/amd64 ${BUILD_ARGS} -t ${BULWARK_IMG} .
 	docker push ${BULWARK_IMG}
 
 # Push the docker image
@@ -300,3 +296,6 @@ tencent-provider:
 	kubectl apply -f examples/tencent/provider.yaml
 
 tencent: tencent-credentials tencent-provider
+
+upgrade-terraform-bin:
+	bash hack/upgrade-terraform-bin.sh 
