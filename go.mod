@@ -1,6 +1,6 @@
 module github.com/oam-dev/terraform-controller
 
-go 1.20
+go 1.21
 
 require (
 	github.com/Azure/go-autorest/autorest/to v0.4.0
