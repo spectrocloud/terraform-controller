@@ -1,0 +1,5 @@
+841b0d17d9fa00038611f24ee1bfbf76355602b2:examples/git-credentials/ssh-keys-secret.yaml:kubernetes-secret-yaml:2
+f9a6b98f301af9e7d70bdabffb62bb4126605879:getting-started.md:private-key:197
+d0a1f4f47b642d514fadc9549ec2eb3400387d72:controllers/configuration_controller.go:generic-api-key:1074
+772ccd7f8419bb782fb7e4f48b14c67452bd4c3e:CONTRIBUTING.md:private-key:322
+267ac866c88dc3c3490c7c5fc1a45de968153009:getting-started.md:private-key:307
